@@ -3,6 +3,7 @@ using IdentityAPI.Data;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
@@ -57,7 +58,6 @@ namespace IdentityAPI
                 options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
                 options.DefaultScheme = JwtBearerDefaults.AuthenticationScheme;
             })
-
             // Adding Jwt Bearer
             .AddJwtBearer(options =>
             {
@@ -90,6 +90,24 @@ namespace IdentityAPI
                 // Lockout settings.
                 options.Lockout.MaxFailedAccessAttempts = 3;
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(10);
+            });
+
+            services.ConfigureApplicationCookie(option => //cookie burada yaratýlýr.
+            {
+                option.LoginPath = "/account/login";
+                option.LogoutPath = "/account/logout";
+                option.AccessDeniedPath = "/account/accessdenied"; //yanlýþ yere girenler için gereklidir. 
+                option.SlidingExpiration = true; //session süresi 20 dk dýr 20 dk boyunca herhangi bir istek gelmezse oturum kapatýlýr. 
+                option.ExpireTimeSpan = TimeSpan.FromMinutes(36); //36 dk'lýk bir session oluþtur.
+
+                option.Cookie = new CookieBuilder
+                {
+                    HttpOnly = true, //cookie'yi sadece http olarak alabiliriz.
+                    Name = ".Shopapp.Security.Cookie",
+                    SameSite = SameSiteMode.Strict //B kullanýcýsý Anýn cookiesine sahip olsa bile onun adýna iþlem ypaamz bunu yazarsak 
+                };
+
+
             });
         }
 

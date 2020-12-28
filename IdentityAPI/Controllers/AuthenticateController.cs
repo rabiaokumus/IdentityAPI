@@ -44,28 +44,28 @@ namespace IdentityAPI.Controllers
 
             if (user != null && await _userManager.CheckPasswordAsync(user, model.Password))
             {
-                var userRoles = await _userManager.GetRolesAsync(user);
-
                 var authClaims = new List<Claim>
                 {
                     new Claim(ClaimTypes.Name, user.UserName),
                     new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
                 };
 
-                foreach (var userRole in userRoles)
-                {
-                    authClaims.Add(new Claim(ClaimTypes.Role, userRole));
-                }
-
                 var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Secret"]));
 
                 var token = new JwtSecurityToken(
                     issuer: _configuration["JWT:ValidIssuer"],
                     audience: _configuration["JWT:ValidAudience"],
-                    expires: DateTime.Now.AddHours(3),
+                    expires: DateTime.Now.AddDays(3),
                     claims: authClaims,
                     signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
                     );
+
+                var userRoles = await _userManager.GetRolesAsync(user);
+
+                foreach (var userRole in userRoles)
+                {
+                    authClaims.Add(new Claim(ClaimTypes.Role, userRole));
+                }
 
                 return Ok(new
                 {
@@ -83,7 +83,7 @@ namespace IdentityAPI.Controllers
         [Route("Register")]
         public async Task<IActionResult> Register([FromBody] RegisterModel model)
         {
-            var userExists = await _userManager.FindByNameAsync(model.Username);
+            var userExists = await _userManager.FindByEmailAsync(model.Email);
             if (userExists != null)
                 return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "User already exists!" });
 
@@ -97,6 +97,19 @@ namespace IdentityAPI.Controllers
             var result = await _userManager.CreateAsync(user, model.Password);
             if (!result.Succeeded)
                 return StatusCode(StatusCodes.Status500InternalServerError, result.Errors);
+            else
+            {
+                if (!_roleManager.RoleExistsAsync(IdentityAPI.Core.Roles.UserRoles.User).Result)
+                {
+                    var role = new ApplicationRole() { Name = IdentityAPI.Core.Roles.UserRoles.User };
+
+                    var roleResult = await _roleManager.CreateAsync(role);
+                    if (roleResult.Succeeded)
+                        _userManager.AddToRoleAsync(user, IdentityAPI.Core.Roles.UserRoles.User).Wait();
+                }
+                else
+                    _userManager.AddToRoleAsync(user, IdentityAPI.Core.Roles.UserRoles.User).Wait();
+            }
 
             return Ok(new Response { Status = "Success", Message = "User created successfully!" });
         }
@@ -107,7 +120,7 @@ namespace IdentityAPI.Controllers
         [Route("Register-admin")]
         public async Task<IActionResult> RegisterAdmin([FromBody] RegisterModel model)
         {
-            var userExists = await _userManager.FindByNameAsync(model.Username);
+            var userExists = await _userManager.FindByNameAsync(model.Email);
             if (userExists != null)
                 return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "User already exists!" });
 
@@ -120,7 +133,7 @@ namespace IdentityAPI.Controllers
 
             var result = await _userManager.CreateAsync(user, model.Password);
             if (!result.Succeeded)
-                return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "User creation failed! Please check user details and try again." });
+                return StatusCode(StatusCodes.Status500InternalServerError, result.Errors);
 
             if (!await _roleManager.RoleExistsAsync(IdentityAPI.Core.Roles.UserRoles.Admin))
                 await _roleManager.CreateAsync(new IdentityRole(IdentityAPI.Core.Roles.UserRoles.Admin));
