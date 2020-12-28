@@ -16,5 +16,10 @@ namespace IdentityAPI.Core.Models
 
         [Required(ErrorMessage = "Password is required")]
         public string Password { get; set; }
+
+        [DataType(DataType.Password)]
+        [Display(Name = "Confirm Password")]
+        [Compare("Password", ErrorMessage = "Password and confirmation password not match.")]
+        public string ConfirmPassword { get; set; }
     }
 }
