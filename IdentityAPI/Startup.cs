@@ -1,24 +1,22 @@
+﻿using IdentityAPI.Core.Models;
 using IdentityAPI.Core.Models.Authentication;
+using IdentityAPI.Core.Service;
 using IdentityAPI.Data;
+using IdentityAPI.Service;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace IdentityAPI
 {
@@ -36,6 +34,8 @@ namespace IdentityAPI
         {
             services.AddControllers();
 
+            services.AddScoped<IAuthService<Response>, AuthService>();
+
             services.AddSwaggerGen(c =>
             {
                 c.SwaggerDoc("v1", new OpenApiInfo { Title = "IdentityAPI", Version = "v1" });
@@ -43,11 +43,9 @@ namespace IdentityAPI
 
             services.AddDbContext<ApplicationDbContext>(options => options.UseSqlServer(Configuration.GetConnectionString("ConnStr")));
 
-            // For Identity
-            services.AddIdentity<ApplicationUser, IdentityRole>().AddEntityFrameworkStores<ApplicationDbContext>().AddDefaultTokenProviders();
-
             // Hata yonetimini kendim yonetecegim
-            services.Configure<ApiBehaviorOptions>(options => {
+            services.Configure<ApiBehaviorOptions>(options =>
+            {
                 options.SuppressModelStateInvalidFilter = true;
             });
 
@@ -73,6 +71,14 @@ namespace IdentityAPI
                 };
             });
 
+            // For Identity
+            services.AddIdentity<ApplicationUser, IdentityRole>(options =>
+            {
+                options.Tokens.PasswordResetTokenProvider = TokenOptions.DefaultEmailProvider;
+            })
+                .AddEntityFrameworkStores<ApplicationDbContext>()
+                .AddDefaultTokenProviders();
+
             services.Configure<IdentityOptions>(options =>
             {
                 // User settings.
@@ -81,33 +87,31 @@ namespace IdentityAPI
                 "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._@";
 
                 // Password settings.
-                options.Password.RequireDigit = true;
-                options.Password.RequireLowercase = true;
-                options.Password.RequireNonAlphanumeric = true;
-                options.Password.RequireUppercase = true;
-                options.Password.RequiredLength = 9;
+                options.Password.RequireDigit = true; //0-9 arası sayısal karakter zorunluluğunu kaldırıyoruz.
+                options.Password.RequireLowercase = true; //Küçük harf zorunluluğunu kaldırıyoruz.
+                options.Password.RequireNonAlphanumeric = true; //Alfanumerik zorunluluğunu kaldırıyoruz.
+                options.Password.RequireUppercase = true; //Büyük harf zorunluluğunu kaldırıyoruz.
+                options.Password.RequiredLength = 5;
 
                 // Lockout settings.
                 options.Lockout.MaxFailedAccessAttempts = 3;
                 options.Lockout.DefaultLockoutTimeSpan = TimeSpan.FromMinutes(10);
             });
 
-            services.ConfigureApplicationCookie(option => //cookie burada yarat�l�r.
+            services.ConfigureApplicationCookie(option => //cookie burada yaratýlýr.
             {
                 option.LoginPath = "/account/login";
                 option.LogoutPath = "/account/logout";
-                option.AccessDeniedPath = "/account/accessdenied"; //yanl�� yere girenler i�in gereklidir. 
-                option.SlidingExpiration = true; //session s�resi 20 dk d�r 20 dk boyunca herhangi bir istek gelmezse oturum kapat�l�r. 
-                option.ExpireTimeSpan = TimeSpan.FromMinutes(36); //36 dk'l�k bir session olu�tur.
+                option.AccessDeniedPath = "/account/accessdenied"; //yanlýþ yere girenler için gereklidir. 
+                option.SlidingExpiration = true; //session süresi 20 dk dýr 20 dk boyunca herhangi bir istek gelmezse oturum kapatýlýr. 
+                option.ExpireTimeSpan = TimeSpan.FromMinutes(36); //36 dk'lýk bir session oluþtur.
 
                 option.Cookie = new CookieBuilder
                 {
                     HttpOnly = true, //cookie'yi sadece http olarak alabiliriz.
                     Name = ".Shopapp.Security.Cookie",
-                    SameSite = SameSiteMode.Strict //B kullan�c�s� An�n cookiesine sahip olsa bile onun ad�na i�lem ypaamz bunu yazarsak 
+                    SameSite = SameSiteMode.Strict //B kullanýcýsý Anýn cookiesine sahip olsa bile onun adýna iþlem ypaamz bunu yazarsak 
                 };
-
-
             });
         }
 

@@ -1,37 +1,45 @@
-﻿using IdentityAPI.Core.Models;
+﻿using IdentityAPI.Core.Constants;
+using IdentityAPI.Core.Models;
 using IdentityAPI.Core.Models.Authentication;
+using IdentityAPI.Core.Service;
 using IdentityAPI.Filters;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.IdentityModel.Tokens;
 using System;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
+using System.Net;
 using System.Security.Claims;
 using System.Text;
 using System.Threading.Tasks;
+using System.Web;
 
 namespace IdentityAPI.Controllers
 {
     [Authorize]
     [ApiController]
-    [Route("[controller]")]
+    //[Route("[controller]")]
     public class AuthenticateController : Controller
     {
         private readonly UserManager<ApplicationUser> _userManager;
         private readonly RoleManager<IdentityRole> _roleManager;
         private readonly IConfiguration _configuration;
+        private readonly IAuthService<Response> _authService;
 
         public AuthenticateController(UserManager<ApplicationUser> userManager, RoleManager<IdentityRole> roleManager,
-             IConfiguration configuration)
+             IConfiguration configuration,
+             IAuthService<Response> authService)
         {
             _userManager = userManager;
             _roleManager = roleManager;
             _configuration = configuration;
+            _authService = authService;
         }
 
         [AllowAnonymous]
@@ -40,42 +48,44 @@ namespace IdentityAPI.Controllers
         [Route("Login")]
         public async Task<IActionResult> Login([FromBody] LoginModel model)
         {
-            var user = await _userManager.FindByEmailAsync(model.Email);
+            var result = await _authService.LoginWithRules(model);
 
-            if (user != null && await _userManager.CheckPasswordAsync(user, model.Password))
-            {
-                var authClaims = new List<Claim>
-                {
-                    new Claim(ClaimTypes.Name, user.UserName),
-                    new Claim(JwtRegisteredClaimNames.Jti, Guid.NewGuid().ToString()),
-                };
-
-                var authSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_configuration["JWT:Secret"]));
-
-                var token = new JwtSecurityToken(
-                    issuer: _configuration["JWT:ValidIssuer"],
-                    audience: _configuration["JWT:ValidAudience"],
-                    expires: DateTime.Now.AddDays(3),
-                    claims: authClaims,
-                    signingCredentials: new SigningCredentials(authSigningKey, SecurityAlgorithms.HmacSha256)
-                    );
-
-                var userRoles = await _userManager.GetRolesAsync(user);
-
-                foreach (var userRole in userRoles)
-                {
-                    authClaims.Add(new Claim(ClaimTypes.Role, userRole));
-                }
-
-                return Ok(new
-                {
-                    token = new JwtSecurityTokenHandler().WriteToken(token),
-                    expiration = token.ValidTo
-                });
-            }
-
-            return Unauthorized();
+            if (result.Status == (int)ResultStatus.Result.ERROR)
+                return StatusCode(StatusCodes.Status401Unauthorized, result);
+            else
+                return StatusCode(StatusCodes.Status200OK, result);
         }
+
+
+        [AllowAnonymous]
+        [ValidationFilter]
+        [HttpPost]
+        [Route("ResetPassword")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordModel model)
+        {
+            var result = await _authService.PasswordReset(model);
+
+            if (result.Status == (int)ResultStatus.Result.ERROR)
+                return BadRequest(result);
+            else
+                return StatusCode(StatusCodes.Status200OK, result);
+        }
+
+
+        [AllowAnonymous]
+        [ValidationFilter]
+        [HttpPost]
+        [Route("UpdatePassword/{userId}/{token}")]
+        public async Task<IActionResult> UpdatePassword([FromBody] UpdatePasswordModel model, string userId, string token)
+        {
+            var result = await _authService.UpdatePassword(model, userId, token);
+
+            if (result.Status == (int)ResultStatus.Result.ERROR)
+                return BadRequest(result);
+            else
+                return StatusCode(StatusCodes.Status200OK, result);
+        }
+
 
         [AllowAnonymous]
         [ValidationFilter]
@@ -85,7 +95,7 @@ namespace IdentityAPI.Controllers
         {
             var userExists = await _userManager.FindByEmailAsync(model.Email);
             if (userExists != null)
-                return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "User already exists!" });
+                return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = (int)ResultStatus.Result.ERROR, Message = "User already exists!" });
 
             var user = new ApplicationUser()
             {
@@ -111,7 +121,7 @@ namespace IdentityAPI.Controllers
                     _userManager.AddToRoleAsync(user, IdentityAPI.Core.Roles.UserRoles.User).Wait();
             }
 
-            return Ok(new Response { Status = "Success", Message = "User created successfully!" });
+            return Ok(new Response { Status = (int)ResultStatus.Result.SUCCESS, Message = "User created successfully!" });
         }
 
         [AllowAnonymous]
@@ -122,7 +132,7 @@ namespace IdentityAPI.Controllers
         {
             var userExists = await _userManager.FindByNameAsync(model.Email);
             if (userExists != null)
-                return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = "Error", Message = "User already exists!" });
+                return StatusCode(StatusCodes.Status500InternalServerError, new Response { Status = (int)ResultStatus.Result.ERROR, Message = "User already exists!" });
 
             var user = new ApplicationUser()
             {
@@ -145,8 +155,7 @@ namespace IdentityAPI.Controllers
                 await _userManager.AddToRoleAsync(user, IdentityAPI.Core.Roles.UserRoles.Admin);
             }
 
-            return Ok(new Response { Status = "Success", Message = "User created successfully!" });
+            return Ok(new Response { Status = (int)ResultStatus.Result.SUCCESS, Message = "User created successfully!" });
         }
-
     }
 }
